@@ -1,3 +1,5 @@
+use std::path::Path;
+
 use serde::Serialize;
 use serde_json::{Map, Value};
 
@@ -23,7 +25,7 @@ impl MessageBuilder {
         self
     }
 
-    /// Устанавливает идентификатор сообщения, на которое нужно ответить.
+    /// Устанавливает ID сообщения, на которое нужно ответить.
     pub fn reply_to(mut self, message_id: i64) -> Self {
         self.params.insert("reply_to".to_owned(), Value::from(message_id));
         self
@@ -44,6 +46,30 @@ impl MessageBuilder {
         let attachments = attachments.into_iter().map(Into::into).collect::<Vec<_>>();
         self.params.insert("attachment".to_owned(), Value::String(attachments.join(",")));
         self
+    }
+
+    /// Загружает локальное фото в VK и добавляет его к сообщению.
+    pub async fn attach_local_photo(mut self, path: impl AsRef<Path>) -> Result<Self> {
+        let peer_id = self
+            .params
+            .get("peer_id")
+            .and_then(Value::as_i64)
+            .ok_or_else(|| Error::InvalidParameter("не указан peer_id".into()))?;
+        let photo = self.api.upload_message_photo(peer_id, path).await?;
+        let attachment = photo.attachment();
+
+        let current = self
+            .params
+            .get("attachment")
+            .and_then(Value::as_str)
+            .map(str::to_owned);
+
+        let value = match current {
+            Some(current) if !current.is_empty() => format!("{current},{attachment}"),
+            _ => attachment,
+        };
+        self.params.insert("attachment".to_owned(), Value::String(value));
+        Ok(self)
     }
 
     /// Устанавливает клавиатуру в формате VK.

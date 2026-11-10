@@ -36,6 +36,7 @@ let message_id = bot.send
 - `reply_to(id)` — ID сообщения для ответа.
 - `attachment(value)` — строка вложения VK.
 - `attachments(values)` — несколько вложений через запятую.
+- `attach_local_photo(path)` — загрузить локальное фото, сохранить в VK и добавить в сообщение.
 - `keyboard(value)` — клавиатура в формате VK JSON.
 - `payload(value)` — payload сообщения.
 - `random_id(value)` — собственный идентификатор запроса.

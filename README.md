@@ -1,36 +1,36 @@
 # Vkbots
 
-Асинхронная Rust-библиотека для создания ботов ВКонтакте. Она объединяет работу с VK API, отправку сообщений, Callback API и Bots Long Poll в одном интерфейсе.
+Асинхронная Rust-библиотека для разработки ботов ВКонтакте. Vkbots объединяет VK API, маршрутизацию команд, FSM, загрузку вложений, Callback API и Bots Long Poll.
 
-[Документация](book/README.md) · [Исходный код](https://github.com/ZeeinJordansky/Vkbots)
+[Полная документация](book/README.md) · [Исходный код](https://github.com/ZeeinJordansky/Vkbots) · [Примеры](examples/)
 
 ## Возможности
 
-- Асинхронный клиент VK API на Tokio.
-- Универсальный вызов любого доступного токену метода VK API через `bot.api.call()`.
-- Короткие методы отправки: `bot.send.answer()` и `bot.send.reply()`.
-- Builder отправки с поддержкой вложений, клавиатуры и дополнительных параметров.
-- Получение событий через Callback API или Bots Long Poll.
-- Общая модель события для обоих способов получения обновлений.
-- Типизированные ошибки VK API и HTTP.
-- Настраиваемые версия API и HTTP-тайм-аут.
-- Скрытие токена в отладочном выводе.
-- Независимое подключение компонентов через Cargo features.
+- Асинхронный клиент VK API на Tokio с переиспользованием HTTP-соединений.
+- Универсальный вызов любого доступного токену метода через `bot.api.call()`.
+- Типизированные обёртки для основных методов: `messages.send`, `users.get`, загрузки фото.
+- Отправка сообщений через `send.answer()`, `send.reply()` и builder.
+- Загрузка локальных фотографий через `attach_local_photo()`.
+- Dispatcher команд и сообщений с фильтрами.
+- FSM с хранилищем в памяти и интерфейсом для Redis/PostgreSQL.
+- Callback API и Bots Long Poll.
+- Ограничитель запросов и повторы временных ошибок VK.
+- Unit- и integration-тесты, примеры Callback, клавиатур, бесед и FSM.
 
-## Установка
+## Установка из GitHub
 
-Добавьте библиотеку в `Cargo.toml`:
+До публикации в crates.io добавьте зависимость из репозитория:
 
 ```toml
 [dependencies]
-vkbots = "0.1"
+vkbots = { git = "https://github.com/ZeeinJordansky/Vkbots" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 serde_json = "1"
 ```
 
-По умолчанию включены компоненты `callback` и `long-poll`. Для отключения стандартных компонентов используйте `default-features = false`.
+Стандартно включены features `callback` и `long-poll`. Для сборки только с нужным способом получения событий отключите стандартные features.
 
-## Первый бот
+## Быстрый пример
 
 ```rust
 use vkbots::VkBot;
@@ -38,51 +38,81 @@ use vkbots::VkBot;
 #[tokio::main]
 async fn main() -> vkbots::Result<()> {
     let bot = VkBot::new("ТОКЕН_СООБЩЕСТВА");
-    let message_id = bot.send.answer(123456, "Привет! Я работаю на Vkbots.").await?;
-    println!("Сообщение отправлено: {message_id}");
+    bot.send.answer(123456, "Привет! Я работаю на Vkbots.").await?;
     Ok(())
 }
 ```
 
-## Ответ на сообщение
+## Команды и фильтры
 
 ```rust
-use vkbots::{Message, VkBot};
-
-async fn on_message(bot: &VkBot, message: &Message) -> vkbots::Result<()> {
-    bot.send.reply(message, "Это ответ на ваше сообщение.").await?;
-    Ok(())
-}
-```
-
-## Любой метод VK API
-
-```rust
-use serde_json::json;
-use vkbots::VkBot;
+use vkbots::{dispatcher::filter, VkBot};
 
 #[tokio::main]
 async fn main() -> vkbots::Result<()> {
     let bot = VkBot::new("ТОКЕН_СООБЩЕСТВА");
-    let users: serde_json::Value = bot.api
-        .call("users.get", &json!({ "user_ids": "1" }))
-        .await?;
-    println!("{users:#}");
-    Ok(())
+    let mut dispatcher = bot.dispatcher();
+
+    dispatcher.command("/start", |context| async move {
+        context.answer("Добро пожаловать!").await?;
+        Ok(())
+    });
+
+    dispatcher.message(filter::text("привет"), |context| async move {
+        context.reply("Привет!").await?;
+        Ok(())
+    });
+
+    dispatcher.run_long_poll(123456).await
 }
 ```
 
-Библиотека добавляет `access_token` и `v` автоматически. Доступность конкретного метода определяется VK, типом токена, правами сообщества и ограничениями платформы. Универсальный интерфейс позволяет вызывать методы, для которых ещё нет отдельной обёртки.
+## FSM
 
-## Выбор способа получения событий
+```rust
+dispatcher.command("/register", |context| async move {
+    context.transition("await_name", &serde_json::json!({})).await?;
+    context.answer("Как вас зовут?").await?;
+    Ok(())
+});
+```
 
-| Способ | Когда использовать |
-| --- | --- |
-| Bots Long Poll | Для отдельного процесса бота, который самостоятельно получает обновления |
-| Callback API | Для приложения с публичным HTTP(S)-адресом, принимающего запросы VK |
+Подробный сценарий с несколькими шагами приведён в [примере FSM](examples/fsm_registration.rs).
 
-Подробные руководства, примеры и описание API находятся в каталоге [book](book/README.md).
+## Отправка с фотографией
+
+```rust
+bot.send
+    .to(peer_id)
+    .text("Фото")
+    .attach_local_photo("./img.png")
+    .await?
+    .send()
+    .await?;
+```
+
+## Все методы VK API
+
+Если для нужного метода ещё нет отдельной типизированной обёртки, можно вызвать его напрямую:
+
+```rust
+let response: serde_json::Value = bot.api
+    .call("users.get", &serde_json::json!({ "user_ids": "1" }))
+    .await?;
+```
+
+Библиотека автоматически добавляет `access_token` и `v`. Доступность метода определяется правами токена и ограничениями VK.
+
+## Тесты и документация
+
+```bash
+cargo test --all-features
+cargo check --all-targets --all-features
+cargo clippy --all-targets --all-features
+```
+
+Подробные страницы находятся в [book/](book/README.md). В каталоге `examples/` есть отдельные примеры Long Poll, Callback за Nginx, клавиатур, групповых бесед, Dispatcher и FSM.
 
 ## Лицензия
 
-Vkbots распространяется по лицензии MIT. Полный текст находится в файле [LICENSE](LICENSE).
+MIT. Полный текст — в [LICENSE](LICENSE).

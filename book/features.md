@@ -10,17 +10,17 @@
 Только API-клиент и отправка сообщений:
 
 ```toml
-vkbots = { version = "0.1", default-features = false }
+vkbots = { git = "https://github.com/ZeeinJordansky/Vkbots", default-features = false }
 ```
 
 Только Long Poll:
 
 ```toml
-vkbots = { version = "0.1", default-features = false, features = ["long-poll"] }
+vkbots = { git = "https://github.com/ZeeinJordansky/Vkbots", default-features = false, features = ["long-poll"] }
 ```
 
 Только Callback API:
 
 ```toml
-vkbots = { version = "0.1", default-features = false, features = ["callback"] }
+vkbots = { git = "https://github.com/ZeeinJordansky/Vkbots", default-features = false, features = ["callback"] }
 ```

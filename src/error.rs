@@ -34,6 +34,10 @@ pub enum Error {
     InvalidParameter(String),
     #[error("неожиданный ответ VK: {0}")]
     Protocol(String),
+    #[error("ошибка загрузки файла: {0}")]
+    Upload(String),
+    #[error("ошибка хранилища состояний: {0}")]
+    StateStorage(String),
     #[error("ошибка сетевого сервера: {0}")]
     Io(#[from] std::io::Error),
 }
