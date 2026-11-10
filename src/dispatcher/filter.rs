@@ -32,7 +32,7 @@ pub fn text(expected: impl Into<String>) -> Filter {
         message
             .text
             .as_deref()
-            .map(|text| text.trim().eq_ignore_ascii_case(&expected))
+            .map(|text| text.trim().to_lowercase() == expected)
             .unwrap_or(false)
     })
 }

@@ -2,7 +2,7 @@
 
 FSM хранит текущий шаг пользовательского сценария и связанные с ним данные. Сессия отделяется по паре `peer_id + user_id`, поэтому один пользователь может иметь разные сценарии в личных сообщениях и разных беседах.
 
-## Пример сценария
+## Ручная проверка состояния
 
 ```rust
 use serde_json::json;
@@ -46,6 +46,26 @@ dispatcher.message(filter::any_text(), |ctx| async move {
     Ok(())
 });
 ```
+
+## Обработчики по состояниям
+
+Вместо ручного сравнения `get_state()` можно зарегистрировать отдельный обработчик для каждого шага:
+
+```rust
+dispatcher.on_state("await_name", |ctx| async move {
+    let name = ctx.message.as_ref()
+        .and_then(|message| message.text.as_deref())
+        .unwrap_or("")
+        .trim()
+        .to_owned();
+
+    ctx.transition("await_phone", &serde_json::json!({ "name": name })).await?;
+    ctx.answer("Укажите номер телефона.").await?;
+    Ok(())
+});
+```
+
+Когда FSM текущего пользователя находится в состоянии `await_name`, Dispatcher вызовет этот обработчик. Проверка состояния выполняется до передачи сообщения в handler.
 
 ## Методы контекста
 

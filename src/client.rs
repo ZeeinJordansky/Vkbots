@@ -15,7 +15,7 @@ pub struct VkBot {
 impl VkBot {
     /// Создаёт бота с настройками по умолчанию.
     pub fn new(token: impl Into<String>) -> Self {
-        Self::builder(token).build().expect("стандартный HTTP-клиент должен создаваться без ошибок")
+        Self::from_api(ApiClient::new(token))
     }
 
     /// Создаёт объект настройки клиента.

@@ -1,12 +1,12 @@
 # Установка
 
-Vkbots публикуется как crate `vkbots`. Для использования требуется Rust toolchain и Cargo.
+Vkbots публикуется как crate `vkbots`. Пока пакет не опубликован в crates.io, подключайте его напрямую из GitHub.
 
 Добавьте зависимости в `Cargo.toml`:
 
 ```toml
 [dependencies]
-vkbots = "0.1"
+vkbots = { git = "https://github.com/ZeeinJordansky/Vkbots" }
 tokio = { version = "1", features = ["macros", "rt-multi-thread"] }
 serde_json = "1"
 ```
@@ -15,7 +15,11 @@ serde_json = "1"
 
 ```toml
 [dependencies]
-vkbots = { version = "0.1", default-features = false, features = ["long-poll"] }
+vkbots = {
+    git = "https://github.com/ZeeinJordansky/Vkbots",
+    default-features = false,
+    features = ["long-poll"]
+}
 ```
 
 Для Callback API используйте feature `callback`, для Bots Long Poll — `long-poll`.
@@ -24,6 +28,9 @@ vkbots = { version = "0.1", default-features = false, features = ["long-poll"] }
 
 ```bash
 cargo check
+cargo test --all-features
 ```
 
 Токен должен принадлежать сообществу и иметь права, необходимые для вызываемых методов. Vkbots не получает токены автоматически.
+
+После публикации в crates.io зависимость можно будет указать как `vkbots = "0.2"`.

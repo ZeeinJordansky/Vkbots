@@ -1,4 +1,4 @@
-use std::collections::VecDeque;
+use std::{collections::VecDeque, time::Duration};
 
 use serde::Deserialize;
 use serde_json::Value;
@@ -73,6 +73,7 @@ impl LongPoll {
                 .api
                 .http_client()
                 .get(&self.server.server)
+                .timeout(Duration::from_secs(u64::from(self.wait) + 10))
                 .query(&[
                     ("act", "a_check"),
                     ("key", self.server.key.as_str()),

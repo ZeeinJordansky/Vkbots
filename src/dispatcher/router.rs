@@ -4,7 +4,7 @@ use futures_util::future::BoxFuture;
 
 use crate::{
     error::Result,
-    fsm::{StateMachine, StateStorage},
+    fsm::{SessionKey, StateMachine, StateStorage},
     Event, Message, VkBot,
 };
 
@@ -21,6 +21,7 @@ type Handler = Arc<dyn Fn(Context) -> BoxFuture<'static, Result<()>> + Send + Sy
 enum RouteKind {
     Command(String),
     Message(Filter),
+    State(String),
 }
 
 #[derive(Clone)]
@@ -30,8 +31,6 @@ struct Route {
 }
 
 /// Маршрутизатор событий бота.
-///
-/// Обработчики регистрируются до запуска Long Poll или Callback API.
 #[derive(Clone)]
 pub struct Dispatcher {
     bot: VkBot,
@@ -86,6 +85,19 @@ impl Dispatcher {
         self
     }
 
+    /// Регистрирует обработчик, который вызывается при активном состоянии FSM.
+    pub fn on_state<F, Fut>(&mut self, state: impl Into<String>, handler: F) -> &mut Self
+    where
+        F: Fn(Context) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
+    {
+        self.routes.push(Route {
+            kind: RouteKind::State(state.into()),
+            handler: Arc::new(move |context| Box::pin(handler(context))),
+        });
+        self
+    }
+
     /// Передаёт событие первому совпавшему обработчику.
     ///
     /// Возвращает true, если событие было обработано.
@@ -93,6 +105,20 @@ impl Dispatcher {
         let Some(message) = event.message() else {
             return Ok(false);
         };
+        let session_key = SessionKey::from_message(&message);
+        let current_state = if self
+            .routes
+            .iter()
+            .any(|route| matches!(&route.kind, RouteKind::State(_)))
+        {
+            match session_key.as_ref() {
+                Some(key) => self.state.state(key).await?,
+                None => None,
+            }
+        } else {
+            None
+        };
+
         let context = Context::new(self.bot.clone(), event, self.state.clone());
 
         for route in &self.routes {
@@ -101,6 +127,7 @@ impl Dispatcher {
                     .as_deref()
                     .is_some_and(|received| received == command),
                 RouteKind::Message(filter) => filter.check(&message),
+                RouteKind::State(state) => current_state.as_deref() == Some(state.as_str()),
             };
 
             if matched {
@@ -126,12 +153,10 @@ impl Dispatcher {
     #[cfg(feature = "callback")]
     pub fn callback_server(&self, config: CallbackConfig) -> CallbackServer {
         let dispatcher = self.clone();
-        CallbackServer::new(config).on_event(move |event| {
+        CallbackServer::new(config).on_event_result(move |event| {
             let dispatcher = dispatcher.clone();
             async move {
-                if let Err(error) = dispatcher.dispatch(event).await {
-                    eprintln!("Ошибка обработчика Vkbots: {error}");
-                }
+                dispatcher.dispatch(event).await.map(|_| ())
             }
         })
     }
@@ -164,7 +189,11 @@ fn message_command(message: &Message) -> Option<String> {
 mod tests {
     use serde_json::json;
 
-    use crate::{dispatcher::{filter, Dispatcher}, Event, VkBot};
+    use crate::{
+        dispatcher::{filter, Dispatcher},
+        fsm::SessionKey,
+        Event, VkBot,
+    };
 
     fn message_event(text: &str) -> Event {
         serde_json::from_value(json!({
@@ -200,5 +229,20 @@ mod tests {
 
         assert!(dispatcher.dispatch(message_event("  ПРИВЕТ ")).await.unwrap());
         assert!(!dispatcher.dispatch(message_event("пока")).await.unwrap());
+    }
+
+    #[tokio::test]
+    async fn state_route_matches_current_fsm_step() {
+        let bot = VkBot::new("test-token");
+        let mut dispatcher = Dispatcher::new(bot);
+        dispatcher.on_state("await_name", |_context| async { Ok(()) });
+
+        dispatcher
+            .state()
+            .set_state(&SessionKey::new(2000000001, 42), "await_name")
+            .await
+            .unwrap();
+
+        assert!(dispatcher.dispatch(message_event("Роман")).await.unwrap());
     }
 }

@@ -44,7 +44,7 @@ impl CallbackConfig {
     }
 }
 
-type EventHandler = Arc<dyn Fn(Event) -> BoxFuture<'static, ()> + Send + Sync>;
+type EventHandler = Arc<dyn Fn(Event) -> BoxFuture<'static, Result<()>> + Send + Sync>;
 
 #[derive(Clone)]
 struct CallbackState {
@@ -63,16 +63,34 @@ impl CallbackServer {
         Self {
             state: CallbackState {
                 config,
-                handler: Arc::new(|_| Box::pin(async {})),
+                handler: Arc::new(|_| Box::pin(async { Ok(()) })),
             },
         }
     }
 
-    /// Назначает асинхронный обработчик входящих событий.
+    /// Назначает обработчик события без возвращаемой ошибки.
     pub fn on_event<F, Fut>(mut self, handler: F) -> Self
     where
         F: Fn(Event) -> Fut + Send + Sync + 'static,
         Fut: Future<Output = ()> + Send + 'static,
+    {
+        self.state.handler = Arc::new(move |event| {
+            let future = handler(event);
+            Box::pin(async move {
+                future.await;
+                Ok(())
+            })
+        });
+        self
+    }
+
+    /// Назначает обработчик, который может вернуть ошибку.
+    ///
+    /// При ошибке сервер ответит HTTP 500, чтобы VK повторно доставил событие.
+    pub fn on_event_result<F, Fut>(mut self, handler: F) -> Self
+    where
+        F: Fn(Event) -> Fut + Send + Sync + 'static,
+        Fut: Future<Output = Result<()>> + Send + 'static,
     {
         self.state.handler = Arc::new(move |event| Box::pin(handler(event)));
         self
@@ -121,7 +139,11 @@ async fn handle_callback(
         };
     }
 
-    (state.handler)(event).await;
-    // VK получает подтверждение после завершения обработчика события.
-    (StatusCode::OK, "ok").into_response()
+    match (state.handler)(event).await {
+        Ok(()) => (StatusCode::OK, "ok").into_response(),
+        Err(error) => {
+            eprintln!("Ошибка обработчика Callback API: {error}");
+            (StatusCode::INTERNAL_SERVER_ERROR, "handler failed").into_response()
+        }
+    }
 }
