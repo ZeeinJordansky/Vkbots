@@ -1,7 +1,7 @@
 mod context;
-mod filter;
+pub mod filter;
 mod router;
 
 pub use context::Context;
-pub use filter::{filter, Filter};
+pub use filter::Filter;
 pub use router::Dispatcher;
