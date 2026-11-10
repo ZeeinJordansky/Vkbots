@@ -1,0 +1,29 @@
+[package]
+name = "vkbots"
+version = "0.1.0"
+edition = "2021"
+rust-version = "1.85"
+description = "Асинхронная библиотека для создания ботов ВКонтакте на Rust"
+license = "MIT"
+repository = "https://github.com/ZeeinJordansky/Vkbots"
+readme = "README.md"
+keywords = ["vk", "vkontakte", "bot", "api", "async"]
+categories = ["api-bindings", "asynchronous"]
+
+[features]
+default = ["long-poll", "callback"]
+long-poll = []
+callback = ["dep:axum"]
+
+[dependencies]
+axum = { version = "0.8", optional = true }
+futures-util = "0.3"
+rand = "0.9"
+reqwest = { version = "0.13", features = ["json"] }
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+thiserror = "2"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "time"] }
